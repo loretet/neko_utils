@@ -1,0 +1,26 @@
+L.L. Donati and L. Huusko
+March 2025
+
+
+This package is intended to be used to work with Neko datasets.
+In particular, it provides tools to:
+- convert CSV files into xarray dataset with minimum information loss (works well for plotting and computing any order of statistically averaged quantities, but needs further testing for working with non-averaged quantities)
+- open *0.f0* files by reading the XYZ coordinates from the *0.f00000 file (Neko currently stores coordinates only in the first *0.f0* file)
+
+
+Usage:
+- if one wants to convert a 'basic' 1D csv Neko statistics file to xarray using "y" as letter to indicate the height:
+ds = csv_to_xr(/path/to/csv, basic=True, height="y")
+- if one wants to open a Neko field file:
+ds = nek_dataset(path = f"path/to/case/field0.f000{n}",
+                 ref = f"path/to/ref/field0.f00000")
+
+
+Install by cloning this repository and running << pip install -e . >> in the setup.py folder. 
+Works also in conda environments.
+
+
+Tested with Neko v0.9.1
+
+
+lorenzo.luca.donati@misu.su.se

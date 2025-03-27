@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: neko-utils
+Version: 0.1.0
+Summary: Utilities for working with Neko datasets using xarray
+Author: L. L. Donati & L. Huusko
+Requires-Dist: xarray
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: pymech
