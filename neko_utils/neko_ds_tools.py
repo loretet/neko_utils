@@ -2,6 +2,7 @@ import xarray as xr
 import pymech as pm
 import numpy as np
 from xarray.core.utils import Frozen
+import os
 
 class NekDataStore(xr.backends.common.AbstractDataStore):
     """Xarray store for a Nek field element.
@@ -114,3 +115,35 @@ def nek_dataset(path, ref, drop_variables=None):
         ds = ds.drop_vars(drop_variables)
 
     return ds
+
+def comp_nut(les_folder,output_file="nut_profiles.nc"):
+    """
+    Obtains turbulent viscosity from les0.f* files in Neko.
+
+    Input: les_folder (str) = path to the les0.f* files
+
+    Output: output_file (str) = name of the netCDF dataset with turbulent viscosity
+    """
+    import neko_utils as nk  # assuming your nek_dataset reader is in this module
+    import os
+
+    nut_list,time_list = [],[]
+    files = sorted([f for f in os.listdir(les_folder) if f.startswith("les0.f")])
+    les0_path = os.path.join(les_folder, files[0])
+
+    for t, file in enumerate(files):
+        full_path = os.path.join(les_folder, file)
+        ds = nk.nek_dataset(ref=les0_path, path=full_path)
+        nut_profile = ds.temperature.mean(dim=["x", "y"])
+        # add a time coordinate to the profile
+        nut_profile = nut_profile.expand_dims(time=[t])
+
+        nut_list.append(nut_profile)
+        time_list.append(t)
+    nut_profiles = xr.concat(nut_list, dim="time")
+
+    # save to NetCDF
+    nut_profiles.name = "nut"
+    nut_profiles.to_netcdf(les_folder + output_file)
+
+    return nut_profiles
