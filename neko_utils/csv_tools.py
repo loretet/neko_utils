@@ -3,7 +3,7 @@
 import pandas as pd
 import xarray as xr
 
-def csv_to_xr(path, basic=True, height="z"):
+def csv_to_xr(path, type="fluid", basic=True, height="z"):
     """
     Converts csv Neko file into xarray DataSet.
 
@@ -19,17 +19,36 @@ def csv_to_xr(path, basic=True, height="z"):
     """
 
     df = pd.read_csv(path)
-    if basic or (len(df.columns) - 2 == 11):
-        vars = [
-            "p", "u", "v", "w", "pp", "uu", "vv", "ww", "uv", "uw", "vw"
-        ]
-    else:
-        vars = [
-            "p", "u", "v", "w", "pp", "uu", "vv", "ww", "uv", "uw", "vw", "uuu", "vvv", "www", 
-            "uuv", "uuw", "uvv", "uvw", "vvw", "uww", "vww", "uuuu", "vvvv", "wwww", "ppp", 
-            "pppp", "pu", "pv", "pw", "pdudx", "pdudy", "pdudz", "pdvdx", "pdvdy", "pdvdz", 
-            "pdwdx", "pdwdy", "pdwdz", "e11", "e22", "e33", "e12", "e13", "e23"
-        ]
+    if type=="fluid":
+        if basic or (len(df.columns) - 2 == 11):
+            vars = [
+                "p", "u", "v", "w", "pp", "uu", "vv", "ww", "uv", "uw", "vw"
+            ]
+        else:
+            vars = [
+                "p", "u", "v", "w", "pp", "uu", "vv", "ww", "uv", "uw", "vw", "uuu", "vvv", "www", 
+                "uuv", "uuw", "uvv", "uvw", "vvw", "uww", "vww", "uuuu", "vvvv", "wwww", "ppp", 
+                "pppp", "pu", "pv", "pw", "pdudx", "pdudy", "pdudz", "pdvdx", "pdvdy", "pdvdz", 
+                "pdwdx", "pdwdy", "pdwdz", "e11", "e22", "e33", "e12", "e13", "e23"
+            ]
+    elif type=="scalar":
+        if basic or (len(df.columns) - 2 == 5):
+            vars = [
+                "s", "us", "vs", "ws", "ss"
+            ]
+        else:
+            vars = [
+                "s", "us", "vs", "ws", "ss", "sss", "ssss",
+                "uss", "vss", "wss", "uus", "vvs", "wws","uvs", "uws", "vws", "ps",
+                "pdsdx", "pdsdy", "pdsdz",
+                "udsdx", "udsdy", "udsdz",
+                "vdsdx", "vdsdy", "vdsdz",
+                "wdsdx", "wdsdy", "wdsdz",
+                "sdudx", "sdudy", "sdudz",
+                "sdvdx", "sdvdy", "sdvdz",
+                "sdwdx", "sdwdy", "sdwdz",
+                "ess", "eus", "evs", "ews"
+            ]
 
     col_names = ['time', height] + [var for var in vars]
     df.columns = col_names
