@@ -116,14 +116,14 @@ def nek_dataset(path, ref, drop_variables=None):
 
     return ds
 
-def comp_nut(les_folder,output_file="nut_profiles.nc",save=False):
+def comp_nut(les_folder,save=False,output_file="nut_profiles.nc",):
     """
     Obtains turbulent viscosity from les0.f* files in Neko.
 
     Input: 
         les_folder (str) = path to the les0.f* files
-        output_file (str) = name of the netCDF dataset with turbulent viscosity to be output
         save (bool) = if True, saves the turbulent viscosity profiles to a netCDF file
+        output_file (str) = name of the netCDF dataset with turbulent viscosity to be output if save=True
 
     Output: 
         output_file (str) = name of the netCDF dataset with turbulent viscosity
