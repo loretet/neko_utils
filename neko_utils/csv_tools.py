@@ -23,9 +23,8 @@ def csv_to_xr(path, type="fluid", basic=True, height="z",fluid_csv=None, save=Fa
     Usage: ds = csv_to_xr(/path/to/csv, basic=True, height="z")
     """
 
-    df = pd.read_csv(path)
     if type=="fluid":
-        if basic or (len(df.columns) - 2 == 11):
+        if basic:
             vars = [
                 "p", "u", "v", "w", "pp", "uu", "vv", "ww", "uv", "uw", "vw"
             ] 
@@ -37,7 +36,7 @@ def csv_to_xr(path, type="fluid", basic=True, height="z",fluid_csv=None, save=Fa
                 "pdwdx", "pdwdy", "pdwdz", "e11", "e22", "e33", "e12", "e13", "e23"
             ]
     elif type=="scalar":
-        if basic or (len(df.columns) - 2 == 5):
+        if basic:
             vars = [
                 "s", "us", "vs", "ws", "ss"
             ]
@@ -55,19 +54,17 @@ def csv_to_xr(path, type="fluid", basic=True, height="z",fluid_csv=None, save=Fa
                 "ess", "eus", "evs", "ews"
             ]
 
+
     col_names = ['time', height] + [var for var in vars]
-    df.columns = col_names
-    df_grouped = df.groupby(['time', height]).mean().reset_index()
+    
+    # Explicitly define header behavior to prevent data loss
+    df = pd.read_csv(path, header=None, names=col_names) 
 
-    pivoted_data = {}
-    for var in col_names[2:]:
-        pivoted_data[var] = df_grouped.pivot(index='time', columns=height, values=var)
+    # Round the GLL coordinates to eliminate floating-point sparsity
+    df[height] = df[height].round(6)
 
-    ds = xr.Dataset({
-        var: xr.DataArray(pivoted_data[var].values, dims=("time", height), 
-                          coords={"time": pivoted_data[var].index, height: pivoted_data[var].columns})
-        for var in col_names[2:]
-    })
+    # "Pivot"
+    ds = df.groupby(['time', height]).mean().to_xarray()
 
     if type == "fluid":
         fluid_stat = ds
@@ -77,7 +74,7 @@ def csv_to_xr(path, type="fluid", basic=True, height="z",fluid_csv=None, save=Fa
         fluid_stat = nk.csv_to_xr(fluid_csv, type="fluid", basic=basic, height=height)
 
     for var in vars:  # vars with gradients and e_ij are not treated
-        if len(var) > 1 and "d" not in var:
+        if len(var) > 1 and "d" not in var and "e" not in var:
             if len(var) == 2:
                 if var[0] != "s":
                     ds[var] -= fluid_stat[var[0]] * ds[var[1]]
