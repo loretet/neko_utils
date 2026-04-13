@@ -71,7 +71,7 @@ class NekDataStore(xr.backends.common.AbstractDataStore):
 
         return Frozen(data_vars)
 
-def nek_dataset(path, ref, drop_variables=None):
+def open_dataset(path, ref, drop_variables=None):
     """Interface for converting Nek field files into xarray_ datasets.
 
     Input: path (str) = path to Neko field file *0.f0* (not *0.f00000)
@@ -80,7 +80,7 @@ def nek_dataset(path, ref, drop_variables=None):
 
     Output: xarray dataset now retaining coordinate information
 
-    Usage: ds = nek_dataset(path = f"path/to/case/field0.f000{n}",
+    Usage: ds = open_dataset(path = f"path/to/case/field0.f000{n}",
                              ref = f"path/to/ref/field0.f00000")
 
     .. _xarray: https://docs.xarray.dev/en/stable/
@@ -128,7 +128,7 @@ def comp_nut(les_folder,save=False,output_file="nut_profiles.nc",):
     Output: 
         output_file (str) = name of the netCDF dataset with turbulent viscosity
     """
-    import neko_utils as nk  # assuming your nek_dataset reader is in this module
+    import neko_utils as nk  # assuming your open_dataset reader is in this module
     import os
 
     nut_list,time_list = [],[]
@@ -137,7 +137,7 @@ def comp_nut(les_folder,save=False,output_file="nut_profiles.nc",):
 
     for t, file in enumerate(files):
         full_path = os.path.join(les_folder, file)
-        ds = nk.nek_dataset(ref=les0_path, path=full_path)
+        ds = nk.open_dataset(ref=les0_path, path=full_path)
         nut_profile = ds.temperature.mean(dim=["x", "y"])
         # add a time coordinate to the profile
         nut_profile = nut_profile.expand_dims(time=[t])
