@@ -71,7 +71,7 @@ class NekDataStore(xr.backends.common.AbstractDataStore):
 
         return Frozen(data_vars)
 
-def open_dataset(path, ref, drop_variables=None):
+def open_dataset(path, ref, drop_variables=None, DTYPE='float64'):
     """Interface for converting Nek field files into xarray_ datasets.
 
     Input: path (str) = path to Neko field file *0.f0* (not *0.f00000)
@@ -85,11 +85,11 @@ def open_dataset(path, ref, drop_variables=None):
 
     .. _xarray: https://docs.xarray.dev/en/stable/
     """
-    field = pm.readnek(path)
+    field = pm.readnek(path, dtype=DTYPE)
     if isinstance(field, int):
         raise OSError(f"Failed to load {path}")
 
-    el = pm.readnek(ref)
+    el = pm.readnek(ref, dtype=DTYPE)
     elements = field.elem
     elements2 = el.elem
     elem_stores = [
