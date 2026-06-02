@@ -1,158 +1,141 @@
-import xarray as xr
-import pymech as pm
-import numpy as np
-from xarray.core.utils import Frozen
 import os
+import numpy as np
+import pymech as pm
+import xarray as xr
+from xarray.core.utils import Frozen
 
 class NekDataStore(xr.backends.common.AbstractDataStore):
-    """Xarray store for a Nek field element.
-
-    Parameters
-    ----------
-    elem: :class:`pymech.core.Elem`
-        A Nek5000 element.
-
-    """
+    """Xarray backend store to map a single Nek/Neko element's binary data."""
+    
     axes = ("z", "y", "x")
 
-    def __init__(self, elem, elem2):
-        self.elem = elem
-        self.elem2 = elem2
+    def __init__(self, field_elem, mesh_elem):
+        self.field = field_elem  # Holds variables (velocity, pressure, etc.)
+        self.mesh = mesh_elem    # Holds spatial grid coordinates
 
-    def meshgrid_to_dim(self, mesh):
-        """Reverse of np.meshgrid. This method extracts one-dimensional
-        coordinates from a cubical array format for every direction.
-        """
-        # Dynamically set rounding depth based on precision
-        # float32 only has ~7 significant digits; round to 5 to clear machine noise.
-        decimals = 5 if mesh.dtype == np.float32 else 8
-        
-        dim = np.unique(np.round(mesh, decimals))
-        return dim
+    def meshgrid_to_dim(self, mesh_array):
+        """Extracts 1D coordinate arrays from a 3D meshgrid layout."""
+        # Use 5 decimals for float32 to clear machine noise, 8 for float64
+        decimals = 5 if mesh_array.dtype == np.float32 else 8
+        return np.unique(np.round(mesh_array, decimals))
 
     def get_dimensions(self):
         return self.axes
 
     def get_attrs(self):
-        elem = self.elem
         attrs = {
-            "boundary_conditions": elem.bcs,
-            "curvature": elem.curv,
-            "curvature_type": elem.ccurv,
+            "boundary_conditions": self.field.bcs,
+            "curvature": self.field.curv,
+            "curvature_type": self.field.ccurv,
         }
         return Frozen(attrs)
 
     def get_variables(self):
-        """Generate an xarray dataset from a single element."""
+        """Generates the dictionary of xarray Variables for this element."""
         ax = self.axes
-        elem = self.elem
-        elem2 = self.elem2
+        f, m = self.field, self.mesh
 
+        # Base spatial coordinates and mesh fields
         data_vars = {
-            ax[2]: self.meshgrid_to_dim(elem2.pos[0]),  # x
-            ax[1]: self.meshgrid_to_dim(elem2.pos[1]),  # y
-            ax[0]: self.meshgrid_to_dim(elem2.pos[2]),  # z
-            "xmesh": xr.Variable(ax, elem2.pos[0]),
-            "ymesh": xr.Variable(ax, elem2.pos[1]),
-            "zmesh": xr.Variable(ax, elem2.pos[2]),
-            "ux": xr.Variable(ax, elem.vel[0]),
-            "uy": xr.Variable(ax, elem.vel[1]),
-            "uz": xr.Variable(ax, elem.vel[2]),
+            ax[2]: self.meshgrid_to_dim(m.pos[0]),  # x-coordinate
+            ax[1]: self.meshgrid_to_dim(m.pos[1]),  # y-coordinate
+            ax[0]: self.meshgrid_to_dim(m.pos[2]),  # z-coordinate
+            "xmesh": xr.Variable(ax, m.pos[0]),
+            "ymesh": xr.Variable(ax, m.pos[1]),
+            "zmesh": xr.Variable(ax, m.pos[2]),
+            "ux": xr.Variable(ax, f.vel[0]),
+            "uy": xr.Variable(ax, f.vel[1]),
+            "uz": xr.Variable(ax, f.vel[2]),
         }
-        if elem.pres.size:
-            data_vars["pressure"] = xr.Variable(ax, elem.pres[0])
 
-        if elem.temp.size:
-            data_vars["temperature"] = xr.Variable(ax, elem.temp[0])
+        # Conditional physical fields
+        if f.pres.size:
+            data_vars["pressure"] = xr.Variable(ax, f.pres[0])
+        if f.temp.size:
+            data_vars["temperature"] = xr.Variable(ax, f.temp[0])
 
-        if elem.scal.size:
-            data_vars.update(
-                {
-                    "s{:02d}".format(iscalar + 1): xr.Variable(ax, elem.scal[iscalar])
-                    for iscalar in range(elem.scal.shape[0])
-                }
-            )
+        # Dynamic passive scalars
+        if f.scal.size:
+            for i in range(f.scal.shape[0]):
+                data_vars[f"s{i+1:02d}"] = xr.Variable(ax, f.scal[i])
 
         return Frozen(data_vars)
 
+
 def open_dataset(path, ref, drop_variables=None, DTYPE='float64'):
-    """Interface for converting Nek field files into xarray_ datasets.
+    """Interface for converting single Nek/Neko field files into xarray Datasets.
 
-    Input: path (str) = path to Neko field file *0.f0* (not *0.f00000)
-           ref (str) = path to zero-th Neko field file *0.f00000
-           drop_variables (bool) = list of variables to drop 
-
-    Output: xarray dataset now retaining coordinate information
-
-    Usage: ds = open_dataset(path = f"path/to/case/field0.f000{n}",
-                             ref = f"path/to/ref/field0.f00000")
-
-    .. _xarray: https://docs.xarray.dev/en/stable/
+    Parameters
+    ----------
+    path : str
+        Path to the target Neko field file (e.g., 'field0.f00005')
+    ref : str
+        Path to the reference mesh topology file (usually 'field0.f00000')
+    drop_variables : list, optional
+        List of variable names to drop from the final dataset.
+    DTYPE : str, default='float64'
+        Precision layout of the binary file ('float32' or 'float64').
     """
-    field = pm.readnek(path, dtype=DTYPE)
-    if isinstance(field, int):
-        raise OSError(f"Failed to load {path}")
+    field_data = pm.readnek(path, dtype=DTYPE)
+    if isinstance(field_data, int):
+        raise OSError(f"Failed to load target file: {path}")
 
-    el = pm.readnek(ref, dtype=DTYPE)
-    elements = field.elem
-    elements2 = el.elem
-    elem_stores = [
-        NekDataStore(elem, elem2) for elem, elem2 in zip(elements, elements2)
-    ]
+    mesh_data = pm.readnek(ref, dtype=DTYPE)
+    if isinstance(mesh_data, int):
+        raise OSError(f"Failed to load reference mesh: {ref}")
+
+    # Build elemental datasets
+    elem_stores = [NekDataStore(f, m) for f, m in zip(field_data.elem, mesh_data.elem)]
+    
     try:
         elem_dsets = [
             xr.Dataset.load_store(store).set_coords(store.axes) for store in elem_stores
         ]
     except ValueError as err:
         raise NotImplementedError(
-            "Opening dataset failed because you probably tried to open a field file "
-            "with an unsupported mesh. "
-            "The `pymech.open_dataset` function currently works only with cartesian "
-            "box meshes. For more details on this, see "
-            "https://github.com/eX-Mech/pymech/issues/31"
+            "Dataset parsing failed. This function currently only maps structured "
+            "Cartesian box meshes cleanly into 1D coordinate dimensions."
         ) from err
 
+    # Combine separate elements into a single continuous domain
     ds = xr.combine_by_coords(elem_dsets, combine_attrs="drop")
-    ds.coords.update({"time": field.time})
+    ds.coords.update({"time": field_data.time})
 
-    if drop_variables:
-        ds = ds.drop_vars(drop_variables)
+    return ds.drop_vars(drop_variables) if drop_variables else ds
 
-    return ds
 
-def comp_nut(les_folder,save=False,output_file="nut_profiles.nc",):
+def comp_nut(les_folder, save=False, output_file="nut_profiles.nc", DTYPE="float32"):
+    """Extracts, horizontally averages, and concatenates turbulent viscosity profiles
+
+    from Neko 'les0.f*' field history outputs.
     """
-    Obtains turbulent viscosity from les0.f* files in Neko.
-
-    Input: 
-        les_folder (str) = path to the les0.f* files
-        save (bool) = if True, saves the turbulent viscosity profiles to a netCDF file
-        output_file (str) = name of the netCDF dataset with turbulent viscosity to be output if save=True
-
-    Output: 
-        output_file (str) = name of the netCDF dataset with turbulent viscosity
-    """
-    import neko_utils as nk  # assuming your open_dataset reader is in this module
-    import os
-
-    nut_list,time_list = [],[]
     files = sorted([f for f in os.listdir(les_folder) if f.startswith("les0.f")])
-    les0_path = os.path.join(les_folder, files[0])
+    if not files:
+        raise FileNotFoundError(f"No les0.f* files found in {les_folder}")
+        
+    les0_ref_path = os.path.join(les_folder, files[0])
+    nut_list = []
 
-    for t, file in enumerate(files):
+    for file in files:
         full_path = os.path.join(les_folder, file)
-        ds = nk.open_dataset(ref=les0_path, path=full_path)
+        
+        # Open using local open_dataset function with matching DTYPE precision
+        ds = open_dataset(path=full_path, ref=les0_ref_path, DTYPE=DTYPE)
+        
+        # Compute horizontal planar mean (LES context: homogeneous x-y directions)
+        # Neko outputs turbulent viscosity (nut) inside the temperature slot for SGS fields
         nut_profile = ds.temperature.mean(dim=["x", "y"])
-        # add a time coordinate to the profile
-        nut_profile = nut_profile.expand_dims(time=[t])
-
+        
+        # Expand along actual physical simulation time instead of loop counter integers
+        nut_profile = nut_profile.expand_dims(time=[ds.time.values])
         nut_list.append(nut_profile)
-        time_list.append(t)
+
+    # Combine profiles along the time timeline
     nut_profiles = xr.concat(nut_list, dim="time")
     nut_profiles.name = "nut"
 
-    # save to NetCDF
     if save:
-        nut_profiles.to_netcdf(les_folder + output_file)
+        output_path = os.path.join(les_folder, output_file)
+        nut_profiles.to_netcdf(output_path)
 
     return nut_profiles
