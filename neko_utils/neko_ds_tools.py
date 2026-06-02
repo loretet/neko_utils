@@ -23,7 +23,11 @@ class NekDataStore(xr.backends.common.AbstractDataStore):
         """Reverse of np.meshgrid. This method extracts one-dimensional
         coordinates from a cubical array format for every direction.
         """
-        dim = np.unique(np.round(mesh, 8))
+        # Dynamically set rounding depth based on precision
+        # float32 only has ~7 significant digits; round to 5 to clear machine noise.
+        decimals = 5 if mesh.dtype == np.float32 else 8
+        
+        dim = np.unique(np.round(mesh, decimals))
         return dim
 
     def get_dimensions(self):
